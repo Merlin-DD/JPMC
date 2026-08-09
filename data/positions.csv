@@ -1,0 +1,9 @@
+ticker,name,currency,shares,financing_spread_bps,sector
+AAPL,Apple Inc,USD,1359,44,Technology
+MSFT,Microsoft Corp,USD,101,65,Technology
+0700.HK,Tencent Holdings,HKD,551,58,Communication Services
+0005.HK,HSBC Holdings,HKD,335,43,Financials
+7203.T,Toyota Motor Corp,JPY,1435,99,Consumer Discretionary
+6758.T,Sony Group Corp,JPY,228,105,Technology
+SAP.DE,SAP SE,EUR,914,34,Technology
+SIE.DE,Siemens AG,EUR,111,41,Industrials
