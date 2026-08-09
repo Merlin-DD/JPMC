@@ -1,0 +1,62 @@
+annotated-types==0.8.0
+anthropic==0.121.0
+anyio==4.14.2
+appdirs @ file:///home/conda/feedstock_root/build_artifacts/appdirs_1733753955715/work
+asgiref==3.12.1
+backports.zstd @ file:///Users/runner/miniforge3/conda-bld/bld/rattler-build_backports.zstd_1781450816/work
+beautifulsoup4 @ file:///home/conda/feedstock_root/build_artifacts/beautifulsoup4_1780853104376/work
+Brotli @ file:///Users/runner/miniforge3/conda-bld/brotli-split_1764017116075/work
+certifi @ file:///home/conda/feedstock_root/build_artifacts/certifi_1784717589373/work/certifi
+cffi @ file:///Users/runner/miniforge3/conda-bld/cffi_1785811028546/work
+charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1783505251992/work
+curl_cffi @ file:///Users/runner/miniforge3/conda-bld/bld/rattler-build_curl-cffi_1784882191/work
+distro==1.9.0
+Django==6.1
+docstring_parser==0.18.0
+frozendict @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_frozendict_1781203600/work
+gunicorn==26.0.0
+h11==0.16.0
+h2 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_h2_1785796355/work
+hpack @ file:///home/conda/feedstock_root/build_artifacts/hpack_1782283902770/work
+html5lib @ file:///home/conda/feedstock_root/build_artifacts/html5lib_1734075161666/work
+httpcore==1.0.9
+httpx==0.28.1
+hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1737618333194/work
+idna @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_idna_1781620148/work
+iniconfig==2.3.0
+jiter==0.16.0
+lxml @ file:///Users/runner/miniforge3/conda-bld/lxml_1779194844025/work
+markdown-it-py @ file:///home/conda/feedstock_root/build_artifacts/markdown-it-py_1778169583724/work
+mdurl @ file:///home/conda/feedstock_root/build_artifacts/mdurl_1733255585584/work
+multitasking @ file:///home/conda/feedstock_root/build_artifacts/multitasking_1776958931994/work
+numpy @ file:///Users/runner/miniforge3/conda-bld/bld/rattler-build_numpy_1783206218/work/dist/numpy-2.5.1-cp312-cp312-macosx_11_0_arm64.whl#sha256=08fc1e9e9a36b2ef21e94644378d56bee58e529a9dc11e3391497cbc284f5686
+packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1785888127/work
+pandas @ file:///Users/runner/miniforge3/conda-bld/bld/rattler-build_pandas_1785276448/work
+peewee @ file:///Users/runner/miniforge3/conda-bld/bld/rattler-build_peewee_1785587592/work
+platformdirs @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_platformdirs_1786197727/work
+pluggy==1.6.0
+protobuf @ file:///Users/runner/miniforge3/conda-bld/protobuf_1781355976827/work/bazel-bin/python/dist/protobuf-7.35.1-cp312-abi3-macosx_11_0_arm64.whl#sha256=b4e1e693ce39b1a57e45c3f29607f99b9e614a88715534929bc99dffb569baea
+pycparser @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_pycparser_1779293633/work
+pydantic==2.13.4
+pydantic_core==2.46.4
+Pygments @ file:///home/conda/feedstock_root/build_artifacts/pygments_1774796700044/work
+PySocks @ file:///home/conda/feedstock_root/build_artifacts/pysocks_1733217236728/work
+pytest==9.1.1
+python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_python-dateutil_1751104122/work
+python-dotenv==1.2.2
+pytz @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_pytz_1785077087/work
+requests @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_requests_1778851103/work
+rich @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_rich_1775991661/work/dist
+setuptools==83.0.0
+six @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_six_1753199211/work
+sniffio==1.3.1
+soupsieve @ file:///home/conda/feedstock_root/build_artifacts/soupsieve_1786202050811/work
+sqlparse==0.5.5
+typing-inspection==0.4.2
+typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_typing_extensions_1783002732/work
+urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1778188571305/work
+webencodings @ file:///home/conda/feedstock_root/build_artifacts/webencodings_1733236011802/work
+websockets @ file:///Users/runner/miniforge3/conda-bld/bld/rattler-build_websockets_1785597288/work/dist
+wheel==0.47.0
+whitenoise==6.12.0
+yfinance @ file:///home/conda/feedstock_root/build_artifacts/yfinance_1784993511916/work

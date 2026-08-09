@@ -9,3 +9,7 @@
 
 # Python bytecode/cache
 __pycache__/
+
+# Collected static files
+staticfiles/
+
