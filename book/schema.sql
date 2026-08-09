@@ -9,18 +9,22 @@ CREATE TABLE IF NOT EXISTS positions (
 
 CREATE TABLE IF NOT EXISTS prices (
     ticker TEXT,
-    ts TEXT,
+    bar_ts TEXT,
+    fetched_at TEXT,
+    asof_date TEXT,
     close REAL,
     is_stale INTEGER DEFAULT 0,
-    PRIMARY KEY (ticker, ts)
+    PRIMARY KEY (ticker, bar_ts)
 );
 
 CREATE TABLE IF NOT EXISTS fx_rates (
     currency TEXT,
-    ts TEXT,
+    bar_ts TEXT,
+    fetched_at TEXT,
+    asof_date TEXT,
     usd_per_unit REAL,
     is_stale INTEGER DEFAULT 0,
-    PRIMARY KEY (currency, ts)
+    PRIMARY KEY (currency, bar_ts)
 );
 
 CREATE TABLE IF NOT EXISTS pnl_attribution (
