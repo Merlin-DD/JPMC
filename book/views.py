@@ -4,6 +4,7 @@ from django.shortcuts import render
 
 from book.dashboard import build_summary
 from book.db import get_conn
+from book.risk import build_risk
 
 PALETTE_COOKIE = "palette"
 PALETTES = ("standard", "cvd")
@@ -25,17 +26,15 @@ def _summary():
         conn.close()
 
 
-def _page(request, template, active_page):
+def _page(request, template, active_page, extra=None):
     """Shared context for every page that carries the desk header."""
-    return render(
-        request,
-        template,
-        {
-            "summary": _summary(),
-            "palette": _palette(request),
-            "active_page": active_page,
-        },
-    )
+    context = {
+        "summary": _summary(),
+        "palette": _palette(request),
+        "active_page": active_page,
+    }
+    context.update(extra or {})
+    return render(request, template, context)
 
 
 def index(request):
@@ -43,7 +42,12 @@ def index(request):
 
 
 def risk(request):
-    return _page(request, "book/risk.html", "risk")
+    conn = get_conn()
+    try:
+        risk_model = build_risk(conn)
+    finally:
+        conn.close()
+    return _page(request, "book/risk.html", "risk", {"risk": risk_model})
 
 
 def api_summary(request):

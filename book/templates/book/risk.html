@@ -1,20 +1,185 @@
 {% extends "book/base.html" %}
+{% load static %}
 
 {% block title %}Risk — Synthetic Equity Swap Book{% endblock %}
 
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+{% endblock %}
+
 {% block content %}
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Risk</h2>
-      <div class="sub">Not built yet</div>
+  {% if risk.empty %}
+    <div class="panel"><div class="empty">
+      No exposure to report. Run <code>python manage.py seed</code> then
+      <code>python manage.py compute_attribution</code>.
+    </div></div>
+  {% else %}
+
+  <section class="kpis">
+    <div class="kpi">
+      <div class="label">Annualized vol</div>
+      <div class="value">{{ risk.volatility.annualized_display }}</div>
     </div>
-    <div class="empty">
-      <p><strong>Coming next.</strong></p>
-      <p>
-        This page is a placeholder so the header nav resolves. The book
-        header above is live — it polls <code>/api/summary</code> on the
-        same {{ summary.refresh_seconds }}s cadence as the main dashboard.
-      </p>
+    <div class="kpi">
+      <div class="label">Gross exposure</div>
+      <div class="value {{ risk.gross.sign }}">{{ risk.gross.display }}<span class="unit">USD</span></div>
+    </div>
+    <div class="kpi">
+      <div class="label">Net exposure</div>
+      <div class="value {{ risk.net.sign }}">{{ risk.net.display }}<span class="unit">USD</span></div>
+    </div>
+    <div class="kpi">
+      <div class="label">Largest position</div>
+      <div class="value">{{ risk.concentration.largest_share_display }}</div>
+      <div class="label" style="text-transform:none;letter-spacing:0">{{ risk.concentration.largest_ticker }}</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Top 3 share</div>
+      <div class="value">{{ risk.concentration.top3_share_display }}</div>
+      <div class="label" style="text-transform:none;letter-spacing:0">{{ risk.concentration.top3_tickers|join:", " }}</div>
     </div>
   </section>
+
+  <section class="panel" style="margin-bottom:16px">
+    <div class="panel-head">
+      <h2>P&amp;L attribution — last {{ risk.chart.days }} market dates</h2>
+      <div class="sub">Four legs, stacked. USD.</div>
+    </div>
+    <div class="legend" id="chart-legend">
+      {% for s in risk.chart.series %}
+      <span><i data-series="{{ s.key }}"></i>{{ s.label }}</span>
+      {% endfor %}
+    </div>
+    <div class="chart-wrap"><canvas id="pnl-chart"></canvas></div>
+  </section>
+
+  <div class="grid-2">
+    <section class="panel">
+      <div class="panel-head"><h2>Exposure by currency</h2></div>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">CCY</th>
+              <th scope="col" class="num">Positions</th>
+              <th scope="col" class="num">Gross</th>
+              <th scope="col" class="num">Net</th>
+              <th scope="col" class="num">% Gross</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in risk.by_currency %}
+            <tr>
+              <td class="ccy">{{ b.name }}</td>
+              <td class="num">{{ b.count }}</td>
+              <td class="num {{ b.gross.sign }}">{{ b.gross.display }}</td>
+              <td class="num {{ b.net.sign }}">{{ b.net.display }}</td>
+              <td class="num">{{ b.share_display }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td class="num">{{ risk.position_count }}</td>
+              <td class="num {{ risk.gross.sign }}">{{ risk.gross.display }}</td>
+              <td class="num {{ risk.net.sign }}">{{ risk.net.display }}</td>
+              <td class="num">100.00%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Exposure by sector</h2></div>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Sector</th>
+              <th scope="col" class="num">Positions</th>
+              <th scope="col" class="num">Gross</th>
+              <th scope="col" class="num">Net</th>
+              <th scope="col" class="num">% Gross</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in risk.by_sector %}
+            <tr>
+              <td>{{ b.name }}</td>
+              <td class="num">{{ b.count }}</td>
+              <td class="num {{ b.gross.sign }}">{{ b.gross.display }}</td>
+              <td class="num {{ b.net.sign }}">{{ b.net.display }}</td>
+              <td class="num">{{ b.share_display }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td class="num">{{ risk.position_count }}</td>
+              <td class="num {{ risk.gross.sign }}">{{ risk.gross.display }}</td>
+              <td class="num {{ risk.net.sign }}">{{ risk.net.display }}</td>
+              <td class="num">100.00%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Concentration</h2>
+      <div class="sub">Ranked by absolute USD exposure</div>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">Ticker</th>
+            <th scope="col">Name</th>
+            <th scope="col">CCY</th>
+            <th scope="col">Sector</th>
+            <th scope="col" class="num">Exposure</th>
+            <th scope="col" class="num">% Gross</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in risk.concentration.ranked %}
+          <tr>
+            <td class="num" style="text-align:left">{{ forloop.counter }}</td>
+            <td class="ticker">{{ r.ticker }}</td>
+            <td class="name">{{ r.name }}</td>
+            <td class="ccy">{{ r.currency }}</td>
+            <td class="name">{{ r.sector }}</td>
+            <td class="num {{ r.exposure.sign }}">{{ r.exposure.display }}</td>
+            <td class="num">{{ r.share_display }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="stat-note">
+      Volatility: standard deviation of daily book returns (P&amp;L over
+      prior-day gross exposure), scaled by &radic;{{ risk.trading_days }}.
+      {{ risk.volatility.observations }} observations
+      {% if risk.volatility.excluded_days %}
+        &middot; {{ risk.volatility.excluded_days }} date{{ risk.volatility.excluded_days|pluralize }}
+        excluded for missing venues
+      {% endif %}
+      &middot; daily {{ risk.volatility.daily_display }}
+      &middot; daily P&amp;L &sigma; {{ risk.volatility.pnl_stdev_display }} USD.
+      {% if risk.long_short_equal %}Book is long-only, so gross equals net.{% endif %}
+    </p>
+  </section>
+
+  {{ risk.chart|json_script:"chart-data" }}
+  {% endif %}
+{% endblock %}
+
+{% block body_scripts %}
+<script src="{% static 'js/risk.js' %}" defer></script>
 {% endblock %}

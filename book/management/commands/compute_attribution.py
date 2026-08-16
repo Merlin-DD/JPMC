@@ -5,7 +5,6 @@ only the plumbing: read positions/prices/fx out of SQLite, hand each
 consecutive date pair to `attribute()`, write the legs back.
 """
 
-from bisect import bisect_right
 from datetime import date
 
 from django.conf import settings
@@ -13,29 +12,7 @@ from django.core.management.base import BaseCommand
 
 from book.attribution import attribute
 from book.db import executemany, fetch_all, get_conn
-
-# One row per (ticker, asof_date): the last bar printed on that market
-# date. Live polling writes many intraday bar_ts per asof_date, so the
-# close is whichever bar has the greatest bar_ts within the date.
-LAST_CLOSE_PER_DATE = """
-    SELECT ticker, asof_date, close
-    FROM prices p
-    WHERE bar_ts = (
-        SELECT MAX(bar_ts) FROM prices q
-        WHERE q.ticker = p.ticker AND q.asof_date = p.asof_date
-    )
-    ORDER BY ticker, asof_date
-"""
-
-LAST_FX_PER_DATE = """
-    SELECT currency, asof_date, usd_per_unit
-    FROM fx_rates f
-    WHERE bar_ts = (
-        SELECT MAX(bar_ts) FROM fx_rates g
-        WHERE g.currency = f.currency AND g.asof_date = f.asof_date
-    )
-    ORDER BY currency, asof_date
-"""
+from book.marks import asof_rate, load_closes, load_rates
 
 UPSERT_ATTRIBUTION = """
     INSERT INTO pnl_attribution (
@@ -84,23 +61,6 @@ def _window(dates: list[str], since_date: str) -> list[str]:
     return []  # everything predates the window - nothing to recompute
 
 
-def _asof_fx(fx_dates: list[str], fx_by_date: dict[str, float], market_date: str):
-    """The FX mark in force on `market_date`: the most recent one dated
-    at or before it. Returns (rate, fx_date), or (None, None).
-
-    An as-of join rather than an exact date match, because FX and equity
-    calendars do not line up and never will — different holidays, and a
-    24-hour market whose "day" boundary is a convention rather than a
-    session. Requiring an exact match silently dropped whole venues out
-    of the book whenever the two disagreed by a single day.
-    """
-    index = bisect_right(fx_dates, market_date) - 1
-    if index < 0:
-        return None, None
-    fx_date = fx_dates[index]
-    return fx_by_date[fx_date], fx_date
-
-
 def compute_all(conn, since_date: str | None = None) -> dict:
     """Recompute pnl_attribution from whatever price/fx history exists.
 
@@ -117,13 +77,8 @@ def compute_all(conn, since_date: str | None = None) -> dict:
         conn, "SELECT ticker, currency, shares, financing_spread_bps FROM positions"
     )
 
-    closes: dict[str, dict[str, float]] = {}
-    for row in fetch_all(conn, LAST_CLOSE_PER_DATE):
-        closes.setdefault(row["ticker"], {})[row["asof_date"]] = row["close"]
-
-    rates: dict[str, dict[str, float]] = {}
-    for row in fetch_all(conn, LAST_FX_PER_DATE):
-        rates.setdefault(row["currency"], {})[row["asof_date"]] = row["usd_per_unit"]
+    closes = load_closes(conn)
+    rates = load_rates(conn)
 
     rows = []
     skipped_no_fx = 0
@@ -141,7 +96,7 @@ def compute_all(conn, since_date: str | None = None) -> dict:
         usable = []
         fx_for_date: dict[str, float] = {}
         for market_date in sorted(by_date):
-            rate, fx_date = _asof_fx(fx_dates, fx_by_date, market_date)
+            rate, fx_date = asof_rate(fx_dates, fx_by_date, market_date)
             if rate is None:
                 skipped_no_fx += 1
                 continue

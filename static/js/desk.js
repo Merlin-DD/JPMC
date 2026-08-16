@@ -22,6 +22,11 @@
       PALETTE_COOKIE + "=" + name + ";path=/;max-age=" + ONE_YEAR + ";SameSite=Lax";
     var label = document.getElementById("palette-name");
     if (label) label.textContent = name;
+    // Anything painting outside CSS — the risk chart — re-reads its
+    // colours from the custom properties when this fires.
+    document.dispatchEvent(
+      new CustomEvent("palettechange", { detail: { palette: name } })
+    );
   }
 
   var toggle = document.getElementById("palette-toggle");
