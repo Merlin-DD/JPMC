@@ -13,3 +13,4 @@ __pycache__/
 # Collected static files
 staticfiles/
 
+verify_commentary.sh

@@ -70,6 +70,15 @@
       setText("asof-compact", data.asof.compact);
     }
 
+    // Commentary is written by the scheduler on its own slower cadence;
+    // the poll only ever reflects whatever row is already cached.
+    if (data.commentary) {
+      setText("commentary-text", data.commentary.text);
+      setText("commentary-asof", data.commentary.asof_date);
+      setText("commentary-generated", data.commentary.generated_at_hkt);
+      setText("commentary-source", data.commentary.source_label);
+    }
+
     var venues = document.getElementById("venues");
     if (venues) {
       data.venues.forEach(function (v) {

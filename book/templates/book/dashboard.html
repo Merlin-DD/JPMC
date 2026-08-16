@@ -26,6 +26,20 @@
     {% endfor %}
   </section>
 
+  {% if summary.commentary %}
+  <section class="panel commentary" id="commentary">
+    <div class="panel-head">
+      <h2>Desk commentary</h2>
+      <div class="sub">
+        as of <span class="num" id="commentary-asof">{{ summary.commentary.asof_date }}</span>
+        &middot; generated <span class="num" id="commentary-generated">{{ summary.commentary.generated_at_hkt }}</span> HKT
+        <span class="tag" data-kind="source" id="commentary-source">{{ summary.commentary.source_label }}</span>
+      </div>
+    </div>
+    <p class="commentary-text" id="commentary-text">{{ summary.commentary.text }}</p>
+  </section>
+  {% endif %}
+
   <section class="panel">
     <div class="panel-head">
       <h2>Attribution by position</h2>

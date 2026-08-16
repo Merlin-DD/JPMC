@@ -491,6 +491,30 @@ tr[data-stale="true"] td:first-child {
   color: var(--neg);
 }
 
+/* Provenance, not a warning — neutral so "rule-based" doesn't read as a
+ * fault. It is a normal operating state when no API key is configured. */
+.tag[data-kind="source"] {
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------- *
+ * Desk commentary
+ * ---------------------------------------------------------------- */
+
+.commentary {
+  margin-bottom: var(--gap);
+}
+
+.commentary-text {
+  margin: 0;
+  padding: 16px;
+  font-size: 15px;
+  line-height: 1.65;
+  max-width: 78ch; /* prose measure — full-width lines are hard to track */
+  color: var(--text);
+}
+
 .empty {
   padding: 48px 16px;
   text-align: center;

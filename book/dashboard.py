@@ -83,6 +83,17 @@ LAST_MARK_PER_TICKER_DATE = """
 # bar_ts is the fetch time, which would always read as brand new.
 NEWEST_BAR = "SELECT MAX(bar_ts) AS newest FROM prices"
 
+# The cached commentary row, read straight from the table. The request
+# path never generates commentary — that is the scheduler's job on its
+# own cadence, and calling a model inside a page render would put a
+# multi-second third-party dependency in front of every visitor.
+LATEST_COMMENTARY = """
+    SELECT asof_date, text, generated_at, source
+    FROM commentary
+    ORDER BY asof_date DESC
+    LIMIT 1
+"""
+
 
 def format_usd(value) -> str:
     """Thousands-separated, fixed 2dp, negatives in accounting parens.
@@ -266,6 +277,39 @@ def _marks_state(conn, venues: dict, refresh_seconds: int, now: datetime) -> dic
     }
 
 
+SOURCE_LABELS = {
+    "claude": "model-generated",
+    "fallback": "rule-based",
+}
+
+
+def _commentary(conn, now: datetime) -> dict | None:
+    """The cached commentary row, or None if none has been written yet."""
+    row = fetch_one(conn, LATEST_COMMENTARY)
+    if row is None or not row["text"]:
+        return None
+
+    generated = _parse_ts(row["generated_at"])
+    duration = humanize_duration(
+        None if generated is None else max(0.0, (now - generated).total_seconds())
+    )
+
+    return {
+        "asof_date": row["asof_date"],
+        "text": row["text"],
+        "generated_at": row["generated_at"],
+        "generated_at_hkt": (
+            "—" if generated is None
+            else generated.astimezone(HKT).strftime("%Y-%m-%d %H:%M:%S")
+        ),
+        "age_words": f"{duration} ago" if duration else "unknown",
+        "source": row["source"],
+        # Spelled out rather than shown as a raw enum: a reader should not
+        # have to know that "fallback" means the model was unavailable.
+        "source_label": SOURCE_LABELS.get(row["source"], row["source"] or "unknown"),
+    }
+
+
 def _asof_spread(rows) -> dict:
     """How the book's market dates are distributed across venues.
 
@@ -320,6 +364,7 @@ def build_summary(conn, refresh_seconds: int, now: datetime | None = None) -> di
             {"venue": v, "status": venues.get(v, "unknown")} for v in VENUE_ORDER
         ],
         "leg_labels": [label for _, label in LEGS],
+        "commentary": _commentary(conn, now),
         "asof": _asof_spread([]),
         "rows": [],
         "kpis": [],

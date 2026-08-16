@@ -43,6 +43,7 @@ from django.conf import settings
 from book.db import fetch_one, get_conn, get_state, set_state
 from book.ingest import fetch_snapshot
 from book.management.commands.compute_attribution import compute_all
+from book.management.commands.generate_commentary import generate_all
 
 logger = logging.getLogger(__name__)
 
@@ -134,17 +135,18 @@ def _run_refresh_loop() -> None:
 def _generate_commentary() -> bool:
     """Run one commentary pass. Returns True if it actually ran.
 
-    Still soft-imported: the commentary module doesn't exist yet, so a
-    missing import is expected rather than an error. Drop the guard the
-    same way the attribution one went once it lands.
+    `generate_all` never raises and falls back to rule-based text when the
+    model is unavailable, so there is nothing to guard against here.
     """
-    try:
-        from book.management.commands.generate_commentary import generate_all
-    except ImportError:
-        logger.info("scheduler[commentary]: not implemented yet, skipping")
-        return False
-    generate_all()
-    return True
+    summary = generate_all()
+    logger.info(
+        "scheduler[commentary]: asof=%s action=%s source=%s%s",
+        summary["asof_date"],
+        summary["action"],
+        summary["source"] or "-",
+        f" ({summary['error']})" if summary["error"] else "",
+    )
+    return summary["action"] == "generated"
 
 
 def _seconds_until_commentary_due(conn) -> float:
