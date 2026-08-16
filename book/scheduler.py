@@ -1,4 +1,5 @@
-"""Background refresh loop: fetch a market snapshot, recompute attribution.
+"""Background refresh loop: fetch a market snapshot, recompute attribution,
+then (once it exists) regenerate commentary.
 
 Started once from BookConfig.ready(). Blocked for every `manage.py`
 subcommand (migrate, seed, shell, collectstatic, ...) except `runserver`
@@ -20,7 +21,9 @@ import sys
 import threading
 import time
 
+from book.db import get_conn
 from book.ingest import fetch_snapshot
+from book.management.commands.compute_attribution import compute_all
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +45,28 @@ def _should_start() -> bool:
 
 
 def _recompute_attribution() -> None:
+    conn = get_conn()
     try:
-        from book.attribution import recompute_attribution
+        summary = compute_all(conn)
+    finally:
+        conn.close()
+    logger.info(
+        "scheduler: attribution rows=%d recon_failures=%d",
+        summary["rows_written"],
+        summary["recon_failures"],
+    )
+
+
+def _generate_commentary() -> None:
+    # Still soft-imported: the commentary module doesn't exist yet, so a
+    # missing import is expected rather than an error. Drop the guard the
+    # same way the attribution one went once it lands.
+    try:
+        from book.management.commands.generate_commentary import generate_all
     except ImportError:
-        logger.info("scheduler: book.attribution not implemented yet, skipping")
+        logger.info("scheduler: commentary not implemented yet, skipping")
         return
-    recompute_attribution()
+    generate_all()
 
 
 def _run_cycle() -> None:
@@ -61,6 +80,11 @@ def _run_cycle() -> None:
         _recompute_attribution()
     except Exception:
         logger.exception("scheduler: recompute_attribution failed")
+
+    try:
+        _generate_commentary()
+    except Exception:
+        logger.exception("scheduler: generate_commentary failed")
     logger.info("scheduler: cycle done, next in %ds", REFRESH_SECONDS)
 
 
