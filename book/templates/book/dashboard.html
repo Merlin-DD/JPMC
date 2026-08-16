@@ -85,10 +85,14 @@
     </div>
   </section>
 
+  {% endif %}
+{% endblock %}
+
+{% block footnote %}
+  {% if not summary.empty %}
   <p class="footnote">
     All values USD. Negatives shown in parentheses. Refreshing every
     {{ summary.refresh_seconds }}s.
   </p>
-
   {% endif %}
 {% endblock %}

@@ -40,7 +40,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from django.conf import settings
 
-from book.db import fetch_one, get_conn, get_state, set_state
+from book.db import fetch_one, get_conn, get_state, missing_tables, set_state
 from book.ingest import fetch_snapshot
 from book.management.commands.compute_attribution import compute_all
 from book.management.commands.generate_commentary import generate_all
@@ -58,6 +58,46 @@ MIN_LOOP_SLEEP = 1.0
 
 _started = False
 _start_lock = threading.Lock()
+
+# Latched so an unprovisioned database is reported once, not once per cycle.
+_schema_warned = False
+_schema_lock = threading.Lock()
+
+
+def _schema_ready() -> bool:
+    """True when schema.sql's tables are all present.
+
+    A database that has only ever been opened is an empty file with no
+    tables, and every query against it raises. Rather than let that surface
+    as a fresh traceback on each of the two loops every cycle, check first,
+    say so once, and idle until `manage.py bootstrap` has run.
+    """
+    global _schema_warned
+
+    conn = get_conn()
+    try:
+        missing = missing_tables(conn)
+    except Exception:
+        logger.exception("scheduler: could not inspect the database schema")
+        return False
+    finally:
+        conn.close()
+
+    with _schema_lock:
+        if missing:
+            if not _schema_warned:
+                logger.error(
+                    "scheduler: database has no %s table(s) — skipping cycles until "
+                    "`python manage.py bootstrap` has run. This message is logged once.",
+                    ", ".join(missing),
+                )
+                _schema_warned = True
+            return False
+
+        if _schema_warned:
+            logger.info("scheduler: schema is present again, resuming cycles")
+            _schema_warned = False
+        return True
 
 
 def _should_start() -> bool:
@@ -107,6 +147,9 @@ def _recompute_attribution() -> None:
 
 
 def _run_refresh_cycle() -> None:
+    if not _schema_ready():
+        return
+
     logger.info("scheduler[refresh]: cycle start")
     try:
         fetch_snapshot()
@@ -202,6 +245,15 @@ def _run_commentary_cycle() -> None:
 
 def _run_commentary_loop() -> None:
     while True:
+        # Checked before reading the cadence stamp, not just before the
+        # cycle: `_seconds_until_commentary_due` queries system_state, which
+        # is itself one of the tables that may not exist yet. Recheck at the
+        # faster cadence while degraded so the loop resumes promptly once
+        # bootstrap has run.
+        if not _schema_ready():
+            time.sleep(max(MIN_LOOP_SLEEP, min(COMMENTARY_SECONDS, REFRESH_SECONDS)))
+            continue
+
         conn = get_conn()
         try:
             wait = _seconds_until_commentary_due(conn)

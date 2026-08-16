@@ -55,6 +55,21 @@
 
   {% block content %}{% endblock %}
 
+  <footer class="about">
+    <p class="about-who">Built by Mohammadamin Motaharinia — Electrical &amp; Computer Engineering PhD candidate, HKUST, Hong Kong.</p>
+    <p>A cross-venue P&amp;L attribution tool for a synthetic equity swap book, decomposing daily
+      P&amp;L into equity delta, FX translation, financing, and the price&ndash;FX cross term, with a
+      reconciliation check on every row. Positions are synthetic; prices come from a delayed
+      public feed.</p>
+    <p class="about-links">
+      <a href="https://github.com/Merlin-DD/JPMC">Source</a>
+      <a href="https://github.com/Merlin-DD">GitHub</a>
+    </p>
+  </footer>
+
+  {# Page-specific closing note, rendered below the About footer. #}
+  {% block footnote %}{% endblock %}
+
 </div>
 <script src="{% static 'js/desk.js' %}" defer></script>
 {% block body_scripts %}{% endblock %}

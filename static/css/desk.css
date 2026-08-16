@@ -569,6 +569,60 @@ tr[data-stale="true"] td:first-child {
   font-size: 12px;
 }
 
+/* ---------------------------------------------------------------- *
+ * About footer
+ *
+ * Attribution, not a banner: a hairline rule, dimmed 12px text, and a
+ * lot of space above it so it reads as an endnote rather than another
+ * panel competing with the tables. Every colour here is a neutral token
+ * (--border / --text-dim / --text) — none of them differ between the
+ * standard and CVD palettes, so the toggle cannot reflow this block.
+ * ---------------------------------------------------------------- */
+
+.about {
+  margin-top: 56px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.65;
+  max-width: 78ch; /* prose measure, as with the commentary panel */
+}
+
+.about p {
+  margin: 0 0 8px;
+}
+
+.about p:last-child {
+  margin-bottom: 0;
+}
+
+/* Slightly lifted, by tone rather than by size or weight alone. */
+.about-who {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.about-links {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.about a {
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+/* Underline is the affordance — deliberately no accent colour, so the
+ * links stay quiet and stay identical in both palettes. Focus gets the
+ * same treatment as hover; a hover-only cue is invisible to the
+ * keyboard. */
+.about a:hover,
+.about a:focus-visible {
+  text-decoration: underline;
+}
+
 /* Respect reduced-motion: the poll still runs, nothing animates. */
 @media (prefers-reduced-motion: reduce) {
   * {
