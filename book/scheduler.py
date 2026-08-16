@@ -70,7 +70,10 @@ def _schema_ready() -> bool:
     A database that has only ever been opened is an empty file with no
     tables, and every query against it raises. Rather than let that surface
     as a fresh traceback on each of the two loops every cycle, check first,
-    say so once, and idle until `manage.py bootstrap` has run.
+    say so once, and idle until bootstrap has run — normally that's
+    book.startup at process boot, before this scheduler even starts, but
+    this stays as a safety net (a disk that goes missing mid-run, or a
+    manual `python manage.py bootstrap` still pending).
     """
     global _schema_warned
 
@@ -100,7 +103,14 @@ def _schema_ready() -> bool:
         return True
 
 
-def _should_start() -> bool:
+def should_start() -> bool:
+    """True only for a real server process: gunicorn, or `runserver`'s
+    reloaded child. False for every other `manage.py` subcommand and for
+    `runserver`'s autoreloader parent, so nothing that runs once per
+    process — this scheduler, and the startup bootstrap in book/startup.py
+    — fires under `manage.py bootstrap`/`seed`/`shell`/etc., or twice under
+    the autoreloader.
+    """
     argv = sys.argv
     if not argv or os.path.basename(argv[0]) != "manage.py":
         return True  # not a manage.py invocation (e.g. gunicorn) - always eligible
@@ -278,7 +288,7 @@ def _run_commentary_loop() -> None:
 def start() -> None:
     global _started
 
-    if not _should_start():
+    if not should_start():
         logger.info(
             "scheduler: not starting (argv=%s, RUN_MAIN=%s)",
             sys.argv,

@@ -19,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 from django.conf import settings
 
-from book.db import SCHEMA_PATH, executemany, fetch_one, get_state, set_state
+from book.db import SCHEMA_PATH, executemany, fetch_one, get_state, missing_tables, set_state
 from book.ingest import is_future_bar
 
 DATA_DIR = Path(settings.BASE_DIR) / "data"
@@ -191,3 +191,48 @@ def init_system_state(conn) -> list[str]:
             set_state(conn, key, value)
             written.append(key)
     return written
+
+
+def bootstrap_database(conn, warn=_noop) -> dict:
+    """Make an empty or partial database usable, without disturbing a live
+    one. This is the single source of truth for that decision — the
+    `bootstrap` management command and the startup path in book/apps.py
+    both call it and only differ in how they report the result.
+
+    Creates any table schema.sql defines that is missing, loads seed CSVs
+    into any of those tables that is completely empty, and fills any unset
+    system_state key. Never drops a table and never reloads one that
+    already has rows, so a deploy over a live disk with a month of
+    accumulated marks is a no-op. Use `seed` (which calls
+    `rebuild_mismatched_tables`) when you actually intend to replace data.
+
+    Raises if a table is still missing after applying schema.sql — better
+    to fail loudly than to silently serve a half-built book.
+    """
+    missing_before = missing_tables(conn)
+    if missing_before:
+        warn(f"schema: missing {', '.join(missing_before)} — creating")
+        create_schema(conn)
+        still_missing = missing_tables(conn)
+        if still_missing:
+            raise RuntimeError(
+                f"tables still missing after applying schema.sql: {still_missing}"
+            )
+
+    loaded, kept = [], []
+    for table, loader in LOADERS.items():
+        before = row_count(conn, table)
+        if before:
+            kept.append(f"{table}={before}")
+            continue
+        loader(conn, warn)
+        loaded.append(f"{table}={row_count(conn, table)}")
+
+    state_written = init_system_state(conn)
+
+    return {
+        "missing_before": missing_before,
+        "loaded": loaded,
+        "kept": kept,
+        "state_written": state_written,
+    }
