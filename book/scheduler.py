@@ -1,5 +1,21 @@
-"""Background refresh loop: fetch a market snapshot, recompute attribution,
-then (once it exists) regenerate commentary.
+"""Background refresh loops.
+
+Two independent cadences, each on its own daemon thread:
+
+* **refresh** (REFRESH_SECONDS, default 60) — fetch a market snapshot,
+  then recompute attribution incrementally.
+* **commentary** (COMMENTARY_SECONDS, default 900) — regenerate the
+  written commentary. Separate because commentary is expensive (an LLM
+  call) and has no reason to run at market-data speed.
+
+Both are started once from BookConfig.ready(), behind a single guard, so
+"started" is all-or-nothing: there is never a book with a refresh loop
+but no commentary loop.
+
+The commentary cadence is anchored on a `last_commentary_run` timestamp
+in system_state rather than on process uptime, so a redeploy or restart
+resumes the existing schedule instead of firing a fresh LLM call on every
+boot.
 
 Started once from BookConfig.ready(). Blocked for every `manage.py`
 subcommand (migrate, seed, shell, collectstatic, ...) except `runserver`
@@ -20,14 +36,24 @@ import os
 import sys
 import threading
 import time
+from datetime import date, datetime, timedelta, timezone
 
-from book.db import get_conn
+from django.conf import settings
+
+from book.db import fetch_one, get_conn, get_state, set_state
 from book.ingest import fetch_snapshot
 from book.management.commands.compute_attribution import compute_all
 
 logger = logging.getLogger(__name__)
 
-REFRESH_SECONDS = int(os.environ.get("REFRESH_SECONDS", "60"))
+REFRESH_SECONDS = settings.REFRESH_SECONDS
+COMMENTARY_SECONDS = settings.COMMENTARY_SECONDS
+
+LAST_COMMENTARY_KEY = "last_commentary_run"
+
+# Floor on every loop iteration. Nothing should be able to turn a loop
+# into a hot spin — not a clock jump, not a failed state write.
+MIN_LOOP_SLEEP = 1.0
 
 _started = False
 _start_lock = threading.Lock()
@@ -44,54 +70,155 @@ def _should_start() -> bool:
     return os.environ.get("RUN_MAIN") == "true"
 
 
+# --------------------------------------------------------------------
+# refresh cadence
+# --------------------------------------------------------------------
+
+
+def _incremental_since(conn) -> str | None:
+    """The window to hand compute_all: one day back from the newest
+    attribution row, so the most recent pair is always recomputed as
+    fresh bars land while settled history is left alone.
+
+    Returns None when pnl_attribution is empty — the first cycle after a
+    cold start does a full build.
+    """
+    row = fetch_one(conn, "SELECT MAX(asof_date) AS latest FROM pnl_attribution")
+    latest = row["latest"] if row else None
+    if not latest:
+        return None
+    return (date.fromisoformat(latest) - timedelta(days=1)).isoformat()
+
+
 def _recompute_attribution() -> None:
     conn = get_conn()
     try:
-        summary = compute_all(conn)
+        since_date = _incremental_since(conn)
+        summary = compute_all(conn, since_date=since_date)
     finally:
         conn.close()
     logger.info(
-        "scheduler: attribution rows=%d recon_failures=%d",
+        "scheduler[refresh]: attribution since=%s rows=%d recon_failures=%d",
+        summary["since_date"] or "(full rebuild)",
         summary["rows_written"],
         summary["recon_failures"],
     )
 
 
-def _generate_commentary() -> None:
-    # Still soft-imported: the commentary module doesn't exist yet, so a
-    # missing import is expected rather than an error. Drop the guard the
-    # same way the attribution one went once it lands.
-    try:
-        from book.management.commands.generate_commentary import generate_all
-    except ImportError:
-        logger.info("scheduler: commentary not implemented yet, skipping")
-        return
-    generate_all()
-
-
-def _run_cycle() -> None:
-    logger.info("scheduler: cycle start")
+def _run_refresh_cycle() -> None:
+    logger.info("scheduler[refresh]: cycle start")
     try:
         fetch_snapshot()
     except Exception:
-        logger.exception("scheduler: fetch_snapshot failed")
+        logger.exception("scheduler[refresh]: fetch_snapshot failed")
 
     try:
         _recompute_attribution()
     except Exception:
-        logger.exception("scheduler: recompute_attribution failed")
+        logger.exception("scheduler[refresh]: recompute_attribution failed")
 
-    try:
-        _generate_commentary()
-    except Exception:
-        logger.exception("scheduler: generate_commentary failed")
-    logger.info("scheduler: cycle done, next in %ds", REFRESH_SECONDS)
+    logger.info("scheduler[refresh]: cycle done, next in %ds", REFRESH_SECONDS)
 
 
-def _run_loop() -> None:
+def _run_refresh_loop() -> None:
     while True:
-        _run_cycle()
-        time.sleep(REFRESH_SECONDS)
+        _run_refresh_cycle()
+        time.sleep(max(MIN_LOOP_SLEEP, REFRESH_SECONDS))
+
+
+# --------------------------------------------------------------------
+# commentary cadence
+# --------------------------------------------------------------------
+
+
+def _generate_commentary() -> bool:
+    """Run one commentary pass. Returns True if it actually ran.
+
+    Still soft-imported: the commentary module doesn't exist yet, so a
+    missing import is expected rather than an error. Drop the guard the
+    same way the attribution one went once it lands.
+    """
+    try:
+        from book.management.commands.generate_commentary import generate_all
+    except ImportError:
+        logger.info("scheduler[commentary]: not implemented yet, skipping")
+        return False
+    generate_all()
+    return True
+
+
+def _seconds_until_commentary_due(conn) -> float:
+    """How long until the next commentary run, from the persisted stamp.
+
+    Zero (due now) when there is no stamp, or when the stamp is corrupt
+    or in the future — a bad value should trigger one run that rewrites
+    it, not wedge the cadence forever.
+    """
+    last = get_state(conn, LAST_COMMENTARY_KEY)
+    if not last:
+        return 0.0
+    try:
+        last_run = datetime.fromisoformat(last)
+    except ValueError:
+        logger.warning("scheduler[commentary]: unparseable %s=%r, running now", LAST_COMMENTARY_KEY, last)
+        return 0.0
+
+    elapsed = (datetime.now(timezone.utc) - last_run).total_seconds()
+    if elapsed < 0:
+        logger.warning("scheduler[commentary]: %s is in the future, running now", LAST_COMMENTARY_KEY)
+        return 0.0
+    return max(0.0, COMMENTARY_SECONDS - elapsed)
+
+
+def _run_commentary_cycle() -> None:
+    """One attempt, then stamp the clock.
+
+    The stamp records the last *attempt*, not the last success, and it is
+    written even when commentary is skipped or fails. Otherwise a missing
+    module or a failing API would leave the run permanently "due" and the
+    loop would spin flat out.
+    """
+    logger.info("scheduler[commentary]: cycle start")
+    try:
+        ran = _generate_commentary()
+    except Exception:
+        logger.exception("scheduler[commentary]: generate_commentary failed")
+        ran = False
+
+    conn = get_conn()
+    try:
+        set_state(conn, LAST_COMMENTARY_KEY, datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    except Exception:
+        logger.exception("scheduler[commentary]: could not stamp %s", LAST_COMMENTARY_KEY)
+    finally:
+        conn.close()
+
+    logger.info(
+        "scheduler[commentary]: cycle done (ran=%s), next in %ds", ran, COMMENTARY_SECONDS
+    )
+
+
+def _run_commentary_loop() -> None:
+    while True:
+        conn = get_conn()
+        try:
+            wait = _seconds_until_commentary_due(conn)
+        except Exception:
+            logger.exception("scheduler[commentary]: could not read cadence state")
+            wait = COMMENTARY_SECONDS
+        finally:
+            conn.close()
+
+        if wait <= 0:
+            _run_commentary_cycle()
+            # Don't re-read the stamp to decide the next sleep: if the
+            # write above failed we'd read 0 again and spin.
+            wait = COMMENTARY_SECONDS
+
+        time.sleep(max(MIN_LOOP_SLEEP, min(wait, COMMENTARY_SECONDS)))
+
+
+# --------------------------------------------------------------------
 
 
 def start() -> None:
@@ -111,6 +238,12 @@ def start() -> None:
             return
         _started = True
 
-    thread = threading.Thread(target=_run_loop, name="synth-pnl-scheduler", daemon=True)
-    thread.start()
-    logger.info("scheduler: started, refreshing every %ds", REFRESH_SECONDS)
+    threading.Thread(target=_run_refresh_loop, name="synth-pnl-refresh", daemon=True).start()
+    threading.Thread(
+        target=_run_commentary_loop, name="synth-pnl-commentary", daemon=True
+    ).start()
+    logger.info(
+        "scheduler: started (refresh every %ds, commentary every %ds)",
+        REFRESH_SECONDS,
+        COMMENTARY_SECONDS,
+    )

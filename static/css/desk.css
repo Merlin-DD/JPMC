@@ -1,0 +1,494 @@
+/* Synthetic Equity Swap Book — desk dashboard.
+ *
+ * Sign is carried by accounting parentheses in the markup, never by
+ * colour alone. The --pos/--neg tokens are reinforcement, which is why
+ * swapping them for the CVD palette changes nothing about legibility.
+ */
+
+/* ---------------------------------------------------------------- *
+ * Fonts — self-hosted woff2, see static/fonts/README.md
+ * ---------------------------------------------------------------- */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../fonts/JetBrainsMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------- *
+ * Tokens
+ * ---------------------------------------------------------------- */
+
+:root {
+  --bg: #0e1116;
+  --surface: #161b22;
+  --border: #262c36;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --warn: #d29922;
+
+  /* standard palette */
+  --pos: #3fb950;
+  --neg: #f85149;
+
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
+    Menlo, Consolas, "Liberation Mono", monospace;
+
+  --radius: 6px;
+  --gap: 16px;
+}
+
+/* Colour-vision-deficient palette: blue/orange instead of green/red.
+ * Only the two sign tokens change — everything else is shared. */
+[data-palette="cvd"] {
+  --pos: #58a6ff;
+  --neg: #f0883e;
+}
+
+/* ---------------------------------------------------------------- *
+ * Base
+ * ---------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+a {
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------- *
+ * Numerics — the hard rules live here
+ * ---------------------------------------------------------------- */
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  text-align: right;
+  font-size: 14px; /* floor, never smaller */
+  white-space: nowrap;
+}
+
+.pos {
+  color: var(--pos);
+}
+.neg {
+  color: var(--neg);
+}
+.zero {
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------- *
+ * Header
+ * ---------------------------------------------------------------- */
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.masthead h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.masthead .meta {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.masthead .meta .num {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.masthead-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.venues {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.pill[data-status="open"] {
+  color: var(--text);
+}
+
+.pill[data-status="open"]::before {
+  background: var(--pos);
+}
+
+/* "closed" keeps the dim dot — the text label carries the state, the
+ * dot only reinforces it. */
+
+.btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--text-dim);
+}
+
+.nav {
+  display: flex;
+  gap: 6px;
+}
+
+.navlink {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13px;
+  text-decoration: none;
+  color: var(--text-dim);
+}
+
+.navlink:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+/* Current page is marked by weight + border, not colour alone. */
+.navlink[aria-current="page"] {
+  color: var(--text);
+  font-weight: 600;
+  border-color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------- *
+ * Staleness + reconciliation badges
+ * ---------------------------------------------------------------- */
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.badge strong {
+  font-weight: 600;
+}
+
+.badge .detail {
+  color: var(--text-dim);
+}
+
+.badge[data-level="ok"] {
+  border-left-color: var(--pos);
+}
+
+/* Markets shut: old marks are correct behaviour, not a fault. Neutral
+ * on purpose — amber every weekend teaches people to ignore the badge. */
+.badge[data-level="closed"] {
+  border-left-color: var(--text-dim);
+}
+.badge[data-level="closed"] strong {
+  color: var(--text-dim);
+}
+.badge[data-level="warn"] {
+  border-left-color: var(--warn);
+}
+.badge[data-level="warn"] strong {
+  color: var(--warn);
+}
+.badge[data-level="stale"] {
+  border-left-color: var(--neg);
+}
+.badge[data-level="stale"] strong {
+  color: var(--neg);
+}
+
+/* ---------------------------------------------------------------- *
+ * KPI strip
+ * ---------------------------------------------------------------- */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--gap);
+  margin: 20px 0 28px;
+}
+
+@media (max-width: 1000px) {
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kpi {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.kpi .label {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kpi .value {
+  margin-top: 6px;
+  font-size: 24px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.kpi .unit {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* ---------------------------------------------------------------- *
+ * Attribution table
+ * ---------------------------------------------------------------- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.panel-head .sub {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th,
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+thead th {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+}
+
+thead th.num {
+  text-align: right;
+  font-family: var(--font-ui);
+}
+
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+td.ticker {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+td.name {
+  color: var(--text-dim);
+}
+
+td.ccy {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+tfoot td {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Stale rows: a text marker plus a left rule. Not colour alone. */
+tr[data-stale="true"] td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--warn);
+  border-radius: 3px;
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.tag[data-kind="break"] {
+  border-color: var(--neg);
+  color: var(--neg);
+}
+
+.empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.footnote {
+  margin-top: 18px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* Respect reduced-motion: the poll still runs, nothing animates. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

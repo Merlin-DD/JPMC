@@ -27,9 +27,29 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "synth_pnl.urls"
 
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+            ],
+        },
+    },
+]
+
 WSGI_APPLICATION = "synth_pnl.wsgi.application"
 
 DB_PATH = os.environ.get("DB_PATH", str(BASE_DIR / "book.sqlite3"))
+
+# Background refresh cadences, in seconds. They live here rather than in
+# book/scheduler.py because the request path needs REFRESH_SECONDS (to
+# set the client poll interval and the staleness thresholds) and must not
+# import the scheduler — and through it, yfinance — to learn it.
+REFRESH_SECONDS = int(os.environ.get("REFRESH_SECONDS", "60"))
+COMMENTARY_SECONDS = int(os.environ.get("COMMENTARY_SECONDS", "900"))
 
 DATABASES = {
     "default": {
@@ -45,6 +65,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
 STORAGES = {
     "staticfiles": {

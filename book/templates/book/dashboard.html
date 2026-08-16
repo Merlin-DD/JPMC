@@ -1,0 +1,80 @@
+{% extends "book/base.html" %}
+
+{% block title %}Synthetic Equity Swap Book — P&amp;L Attribution{% endblock %}
+
+{% block extra_badges %}
+    <span class="badge" id="recon" data-level="{% if summary.recon.ok %}ok{% else %}warn{% endif %}">
+      <strong id="recon-label">{{ summary.recon.label }}</strong>
+      <span class="detail">max |diff| <span class="num" id="recon-diff">{{ summary.recon.display }}</span> USD</span>
+    </span>
+{% endblock %}
+
+{% block content %}
+  {% if summary.empty %}
+    <div class="panel"><div class="empty">
+      No attribution yet. Run <code>python manage.py seed</code> then
+      <code>python manage.py compute_attribution</code>.
+    </div></div>
+  {% else %}
+
+  <section class="kpis" id="kpis">
+    {% for kpi in summary.kpis %}
+    <div class="kpi" data-key="{{ kpi.key }}">
+      <div class="label">{{ kpi.label }}</div>
+      <div class="value {{ kpi.sign }}">{{ kpi.display }}<span class="unit">USD</span></div>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Attribution by position</h2>
+      <div class="sub" id="panel-sub">
+        {{ summary.totals.positions }} positions &middot; as of {{ summary.asof.display }}
+        {% if summary.totals.stale_rows %}&middot; {{ summary.totals.stale_rows }} marked at last traded price{% endif %}
+      </div>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Ticker</th>
+            <th scope="col">Name</th>
+            <th scope="col">CCY</th>
+            <th scope="col" class="num">Shares</th>
+            {% for label in summary.leg_labels %}<th scope="col" class="num">{{ label }}</th>{% endfor %}
+            <th scope="col" class="num">Total</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          {% for row in summary.rows %}
+          <tr data-stale="{{ row.is_stale|yesno:'true,false' }}">
+            <td class="ticker" title="{{ row.venue }} &middot; as of {{ row.asof_date }}">{{ row.ticker }}{% if row.is_stale %}<span class="tag" title="No fresh bar; marked at last traded price">STALE</span>{% endif %}{% if not row.recon_ok %}<span class="tag" data-kind="break" title="Legs do not tie to market value change">BREAK</span>{% endif %}</td>
+            <td class="name">{{ row.name }}</td>
+            <td class="ccy">{{ row.currency }}</td>
+            <td class="num">{{ row.shares_display }}</td>
+            {% for leg in row.legs %}<td class="num {{ leg.sign }}">{{ leg.display }}</td>{% endfor %}
+            <td class="num {{ row.total.sign }}">{{ row.total.display }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot id="totals">
+          <tr>
+            <td colspan="3">Total</td>
+            <td class="num"></td>
+            {% for leg in summary.totals.legs %}<td class="num {{ leg.sign }}">{{ leg.display }}</td>{% endfor %}
+            <td class="num {{ summary.totals.total.sign }}">{{ summary.totals.total.display }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+
+  <p class="footnote">
+    All values USD. Negatives shown in parentheses. Refreshing every
+    {{ summary.refresh_seconds }}s.
+  </p>
+
+  {% endif %}
+{% endblock %}

@@ -14,12 +14,12 @@ symbol was missing from the response entirely.
 
 import logging
 import time
-from datetime import datetime, time as dt_time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 import yfinance as yf
 
 from book.db import executemany, fetch_all, fetch_one, get_conn, set_state
+from book.venues import venue_tz
 
 logger = logging.getLogger(__name__)
 
@@ -29,40 +29,14 @@ FX_CROSSES = {
     "EUR": "EURUSD=X",
 }
 
-# Each currency's home venue, used only to derive asof_date (the market's
-# local calendar date) from a UTC bar_ts. Approximate by design: e.g. a
-# USD position may actually trade on NASDAQ rather than NYSE, but both
-# share America/New_York, so the date derivation is correct either way.
-CURRENCY_VENUE = {
-    "USD": "NYSE",
-    "HKD": "HKEX",
-    "JPY": "TSE",
-    "EUR": "XETRA",
-}
-
 MAX_ATTEMPTS = 3
 RETRY_BACKOFF_SECONDS = 2  # attempt 1 -> wait 2s -> attempt 2 -> wait 4s -> attempt 3
 
 STALE_THRESHOLD = timedelta(minutes=5)
 
-VENUES = {
-    "NYSE": {"tz": ZoneInfo("America/New_York"), "open": dt_time(9, 30), "close": dt_time(16, 0)},
-    "XETRA": {"tz": ZoneInfo("Europe/Berlin"), "open": dt_time(9, 0), "close": dt_time(17, 30)},
-    "HKEX": {"tz": ZoneInfo("Asia/Hong_Kong"), "open": dt_time(9, 30), "close": dt_time(16, 0)},
-    "TSE": {"tz": ZoneInfo("Asia/Tokyo"), "open": dt_time(9, 0), "close": dt_time(15, 0)},
-}
-
 
 def _iso(dt: datetime) -> str:
     return dt.isoformat(timespec="seconds")
-
-
-def _venue_tz(currency: str):
-    venue = CURRENCY_VENUE.get(currency)
-    if venue is None:
-        logger.warning("no venue mapped for currency %s, using UTC for asof_date", currency)
-        return timezone.utc
-    return VENUES[venue]["tz"]
 
 
 def is_future_bar(bar_ts: datetime, now: datetime | None = None) -> bool:
@@ -144,7 +118,7 @@ def _write_prices(conn, positions, raw, fetched_at):
             )
             continue
 
-        asof_date = bar_ts.astimezone(_venue_tz(currency)).date().isoformat()
+        asof_date = bar_ts.astimezone(venue_tz(currency)).date().isoformat()
         is_stale = int((fetched_at - bar_ts) > STALE_THRESHOLD)
         rows.append((ticker, _iso(bar_ts), _iso(fetched_at), asof_date, close, is_stale))
 
@@ -164,11 +138,31 @@ def _write_prices(conn, positions, raw, fetched_at):
     return len(rows)
 
 
+def _fx_asof_date(bar_ts: datetime) -> str:
+    """Market date for an FX mark: the UTC day of the print.
+
+    An FX cross trades ~24x5 with no local session, so it has no venue
+    calendar of its own — dating it by the *equity* venue of its currency
+    is a category error. The Friday 21:00 UTC week-close print for HKD
+    lands at 05:00 Saturday in Hong Kong, which dated it 2026-08-15 and
+    left it unable to join the HKEX equity marks for 2026-08-14 that it
+    is meant to value. EUR escaped only because Berlin is UTC+2 and
+    23:29 Friday still falls on Friday.
+
+    UTC day is the end-of-day-fixing convention, and every venue in this
+    book (TSE 00:00-06:00, HKEX 01:30-08:00, XETRA 07:00-15:30, NYSE
+    13:30-20:00 UTC) trades wholly inside a single UTC day, so an equity
+    date and its FX date now agree by construction.
+    """
+    return bar_ts.astimezone(timezone.utc).date().isoformat()
+
+
 def _write_fx(conn, currencies, raw, fetched_at):
     # USD is the book's base currency, pegged at 1.0 — there's no real
     # market bar for it, so it's always "fresh" as of the poll itself.
-    usd_asof_date = fetched_at.astimezone(_venue_tz("USD")).date().isoformat()
-    rows = [("USD", _iso(fetched_at), _iso(fetched_at), usd_asof_date, 1.0, 0)]
+    rows = [
+        ("USD", _iso(fetched_at), _iso(fetched_at), _fx_asof_date(fetched_at), 1.0, 0)
+    ]
 
     for currency in currencies:
         fx_symbol = FX_CROSSES.get(currency)
@@ -197,7 +191,7 @@ def _write_fx(conn, currencies, raw, fetched_at):
             )
             continue
 
-        asof_date = bar_ts.astimezone(_venue_tz(currency)).date().isoformat()
+        asof_date = _fx_asof_date(bar_ts)
         is_stale = int((fetched_at - bar_ts) > STALE_THRESHOLD)
         rows.append((currency, _iso(bar_ts), _iso(fetched_at), asof_date, rate, is_stale))
 
@@ -288,23 +282,3 @@ def fetch_snapshot() -> None:
         set_state(conn, "last_error", "")
     finally:
         conn.close()
-
-
-def market_status(now: datetime | None = None) -> dict:
-    """Open/closed per venue, derived only from the current UTC time and
-    each venue's nominal Mon-Fri session window.
-
-    Limitation: this ignores exchange holidays entirely (and intraday
-    lunch breaks on HKEX/TSE) — a venue will report "open" on a holiday
-    if the wall-clock time falls inside its normal session. Treat this as
-    a rough liveness signal for the scheduler/UI, not an authoritative
-    trading calendar.
-    """
-    now = now or datetime.now(timezone.utc)
-    status = {}
-    for venue, cfg in VENUES.items():
-        local = now.astimezone(cfg["tz"])
-        is_weekday = local.weekday() < 5
-        in_session = cfg["open"] <= local.time() < cfg["close"]
-        status[venue] = "open" if (is_weekday and in_session) else "closed"
-    return status

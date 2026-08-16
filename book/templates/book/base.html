@@ -1,0 +1,62 @@
+{% load static %}<!doctype html>
+<html lang="en" data-palette="{{ palette }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Synthetic Equity Swap Book{% endblock %}</title>
+<link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/Inter-Regular.woff2' %}" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/JetBrainsMono-Regular.woff2' %}" crossorigin>
+<link rel="stylesheet" href="{% static 'css/desk.css' %}">
+</head>
+<body data-refresh-seconds="{{ summary.refresh_seconds }}">
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <h1>Synthetic Equity Swap Book — P&amp;L Attribution</h1>
+      <div class="meta">
+        Last successful fetch
+        <span class="num" id="fetch-hkt">{{ summary.fetch.last_successful_fetch_hkt }}</span> HKT
+        &middot;
+        <span class="num" id="fetch-age">{{ summary.fetch.age_seconds_display }}</span>s ago
+        {% if not summary.empty %}&middot; marks to <span class="num" id="asof-compact">{{ summary.asof.compact }}</span>{% endif %}
+      </div>
+    </div>
+
+    <div class="masthead-right">
+      <div class="venues" id="venues">
+        {% for v in summary.venues %}
+        <span class="pill" data-status="{{ v.status }}" data-venue="{{ v.venue }}">{{ v.venue }} {{ v.status }}</span>
+        {% endfor %}
+      </div>
+      <nav class="nav">
+        <a class="navlink" href="/"{% if active_page == "book" %} aria-current="page"{% endif %}>Book</a>
+        <a class="navlink" href="/risk"{% if active_page == "risk" %} aria-current="page"{% endif %}>Risk</a>
+      </nav>
+      <button class="btn" id="palette-toggle" type="button"
+              aria-label="Toggle colour palette">Palette: <span id="palette-name">{{ palette }}</span></button>
+    </div>
+  </header>
+
+  <div class="badges">
+    <span class="badge" id="staleness" data-level="{{ summary.marks.level }}">
+      <strong id="staleness-label">{{ summary.marks.level_label }}</strong>
+      <span class="detail" id="staleness-detail">{{ summary.marks.detail }}</span>
+    </span>
+
+    {% block extra_badges %}{% endblock %}
+
+    {% if summary.fetch.last_error %}
+    <span class="badge" data-level="stale">
+      <strong>Ingest error</strong>
+      <span class="detail">{{ summary.fetch.last_error }}</span>
+    </span>
+    {% endif %}
+  </div>
+
+  {% block content %}{% endblock %}
+
+</div>
+<script src="{% static 'js/desk.js' %}" defer></script>
+</body>
+</html>
