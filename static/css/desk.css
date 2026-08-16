@@ -6,50 +6,6 @@
  */
 
 /* ---------------------------------------------------------------- *
- * Fonts — self-hosted woff2, see static/fonts/README.md
- * ---------------------------------------------------------------- */
-
-@font-face {
-  font-family: "Inter";
-  src: url("../fonts/Inter-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Inter";
-  src: url("../fonts/Inter-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Inter";
-  src: url("../fonts/Inter-SemiBold.woff2") format("woff2");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../fonts/JetBrainsMono-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../fonts/JetBrainsMono-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* ---------------------------------------------------------------- *
  * Tokens
  * ---------------------------------------------------------------- */
 
@@ -74,10 +30,15 @@
   --series-financing: #d29922;
   --series-cross: #bc8cff;
 
-  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+  /* System stacks, not self-hosted webfonts — nothing to download, nothing
+   * to 404, and no manifest reference for collectstatic to resolve. The
+   * numeric columns depend on font-variant-numeric: tabular-nums (see
+   * .num), which every face in these stacks supports; a monospace face
+   * gives fixed-width digits regardless. */
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
-    Menlo, Consolas, "Liberation Mono", monospace;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
 
   --radius: 6px;
   --gap: 16px;
@@ -153,12 +114,15 @@ a {
  * Header
  * ---------------------------------------------------------------- */
 
+/* Deliberately a block, not a wrapping flex row.
+ *
+ * As a `flex-wrap: wrap` row the control group sat exactly on a wrap
+ * boundary: the palette button is ~32px narrower when its label reads
+ * "cvd" than "standard", and above ~1300px that delta was enough to pull
+ * the whole row up onto the title line, moving everything below it by
+ * ~48px. A colour toggle must repaint, never reflow — so the control row
+ * is now always its own row, whatever its contents measure. */
 .masthead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--gap);
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
 }
@@ -185,6 +149,7 @@ a {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: var(--gap);
 }
 
 .venues {
@@ -239,6 +204,24 @@ a {
 
 .btn:hover {
   border-color: var(--text-dim);
+}
+
+/* The palette name is the only text on the page whose content changes with
+ * the palette, so it is the only thing that can change the masthead's
+ * measured width. Monospace plus a min-width pins the button: in a
+ * monospace face 1ch is one glyph advance, so this is stable across
+ * platforms without hardcoding pixels.
+ *
+ * 9ch, not 8ch — the longest label ("standard") is 8 glyphs, and at exactly
+ * 8ch the declared minimum came out a fraction *below* the measured text,
+ * so it bound for "cvd" and not for "standard" and the button still moved
+ * by 1/128px. The minimum has to exceed the longest label to bind for
+ * every value. */
+#palette-name {
+  display: inline-block;
+  min-width: 9ch;
+  font-family: var(--font-mono);
+  text-align: left;
 }
 
 .nav {

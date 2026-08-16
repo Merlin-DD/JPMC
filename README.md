@@ -231,13 +231,19 @@ the cross term, financing sign and ACT/360 scaling, reconciliation across a
 mixed-currency book, and the USD case where FX and cross legs must be exactly
 zero.
 
-### Fonts
+### Typography
 
-`static/css/desk.css` references five self-hosted `.woff2` files that are **not
-committed**. Under `DEBUG=True` the browser falls back to the system stack and
-everything works. `collectstatic` (and therefore any deploy) will **fail** until
-they are added — WhiteNoise's manifest storage errors on unresolvable `url()`
-references. See `static/fonts/README.md` for filenames and sources.
+There are **no self-hosted webfonts**. `--font-ui` and `--font-mono` in
+`static/css/desk.css` are system fallback stacks (`system-ui` / `ui-monospace`
+and their platform equivalents), so there is nothing to download, nothing to
+404, and no `url()` reference for WhiteNoise's manifest storage to resolve
+during `collectstatic`.
+
+Numeric alignment does not depend on a particular typeface. The money columns
+set `font-variant-numeric: tabular-nums`, which every face in these stacks
+supports, and `--font-mono` resolves to a monospace face whose digits are
+fixed-width regardless. Rendering differs slightly across platforms; column
+alignment does not.
 
 ---
 
@@ -301,3 +307,8 @@ not a risk number.
   as model-generated or rule-based.
 - **Attribution needs two consecutive marks**, so the first date a position
   appears produces no row.
+- **Typography is system fallback stacks, not self-hosted webfonts**, so the
+  dashboard renders with a different face on macOS, Windows, and Linux. This is
+  a deliberate trade for a deploy with no binary assets to ship or 404. Numeric
+  column alignment is unaffected: it rests on `font-variant-numeric:
+  tabular-nums` plus a monospace stack, both of which the fallbacks provide.
