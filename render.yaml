@@ -2,7 +2,7 @@ services:
   - type: web
     name: synth-pnl
     runtime: python
-    plan: free
+    plan: starter
     buildCommand: ./build.sh
     startCommand: gunicorn synth_pnl.wsgi:application
     healthCheckPath: /healthz

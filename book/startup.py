@@ -1,53 +1,93 @@
-"""One-time database bootstrap at process start.
+"""Deferred, idempotent startup: database bootstrap + the scheduler.
 
-Runs from BookConfig.ready(), before the scheduler starts.
+Neither the bootstrap sequence nor the scheduler's background threads may
+run in AppConfig.ready(). Render's gunicorn.conf.py sets preload_app=True,
+so ready() executes in the gunicorn MASTER process, before any worker is
+forked — and SQLite's own documentation is explicit that a connection must
+never be carried across fork(): the child inherits a copy of the file
+descriptor, sharing the parent's OS-level lock state, but not the thread
+that would ever release it. Two distinct failures follow from that:
 
-Why this exists rather than living in build.sh: on Render, the persistent
-disk is mounted at *runtime*, not during the build step. `build.sh` runs
-before that mount exists, so `python manage.py bootstrap` there fails with
-"unable to open database file" — there is no /data to open DB_PATH under
-yet. The build step can only ever prepare code and static files; anything
-that touches DB_PATH has to happen after the disk is attached, which means
-application startup.
+* A ready()-time bootstrap opens and closes several connections in the
+  master. Individually closed, that's not the danger by itself — the
+  scheduler threads ready() used to start are: they keep the master
+  opening and closing connections indefinitely, on an ongoing 60s/900s
+  cadence, for as long as that master process lives. If gunicorn later
+  forks a *replacement* worker (crash recovery, request-count recycling)
+  at the exact moment one of those threads holds a connection mid-write,
+  the new worker inherits a permanently locked or corrupted database and
+  every request against it fails from then on — with nothing useful in
+  the traceback beyond "database is locked" or "disk image is malformed".
+* Threads spawned pre-fork simply don't exist post-fork at all — fork()
+  only clones the calling thread — so the scheduler that ready() started
+  in the master is silently gone in every actual worker.
 
-Guarded exactly like book.scheduler — `should_start()` skips every
-`manage.py` subcommand except `runserver`'s reloaded child, so this never
-fires under `manage.py bootstrap`/`seed`/`shell`/etc. (avoiding a redundant
-second bootstrap under the very command that already does this by hand)
-and never fires twice under the autoreloader's parent+child.
+The fix: book/apps.py's ready() does not open a connection or start a
+thread. It only registers a trigger. `ensure_started()` here is the real
+entry point — idempotent and non-blocking, safe to call multiple times,
+concurrently, from multiple places — and it does the actual work on a
+background thread so its caller is never held up by it. Two callers fire
+it, and either one winds up doing the work; the other is a no-op:
 
-Never raises past `run()` — a failure here must not stop the process from
-booting. /healthz touches neither the database nor any external API
-specifically so it can answer 200 even when everything below it is broken;
-a startup bootstrap that could take the process down with it would defeat
-that. book.scheduler's own missing-schema tolerance (`_schema_ready`)
-covers the degraded case: cycles idle and re-check until the database is
-fixed, whether that's a retried deploy or a manual `manage.py bootstrap`.
+* gunicorn.conf.py's `post_fork` hook — the primary path in production.
+  Runs once per worker, in that worker's own process, strictly after its
+  fork: the boundary SQLite asks for.
+* Django's `request_started` signal (registered in book/apps.py) — the
+  fallback for `manage.py runserver`, which never forks and has no
+  post_fork hook to call. Also defense in depth if the gunicorn hook is
+  ever not picked up.
 """
 
 import logging
 import os
+import threading
 
 from django.conf import settings
 
-from book.scheduler import should_start
-
 logger = logging.getLogger(__name__)
 
+_lock = threading.Lock()
+_started = False
 
-def run() -> None:
+
+def ensure_started() -> None:
+    """Idempotent and non-blocking. However many times, from however many
+    places, this is called — a post_fork hook, a request, both racing
+    each other — the real work happens at most once per process, and the
+    caller never waits on it."""
+    global _started
+    if _started:
+        return
+    with _lock:
+        if _started:
+            return
+        _started = True
+
+    threading.Thread(target=_run_once, name="synth-pnl-startup", daemon=True).start()
+
+
+def _run_once() -> None:
+    from book.scheduler import should_start
+
     if not should_start():
-        logger.info("startup: not bootstrapping under this process (see scheduler guard)")
+        logger.info("startup: not running under this process (see scheduler guard)")
         return
 
     try:
         _bootstrap()
     except Exception:
         logger.exception(
-            "startup: bootstrap failed — the process will still boot and /healthz "
-            "will still answer; the scheduler will keep idling and retrying until "
-            "the database is fixed (or run `python manage.py bootstrap` by hand)"
+            "startup: bootstrap failed — the process keeps serving requests and "
+            "/healthz still answers; the scheduler will keep idling and retrying "
+            "until the database is fixed (or run `python manage.py bootstrap` by hand)"
         )
+
+    # Started regardless of whether bootstrap succeeded: its own
+    # missing-schema check is exactly the degraded-mode safety net for
+    # when bootstrap fails, not something that should also be skipped.
+    from book import scheduler
+
+    scheduler.start()
 
 
 def _bootstrap() -> None:
@@ -59,8 +99,8 @@ def _bootstrap() -> None:
 
 def _ensure_db_directory() -> None:
     """On a fresh Render disk the mount point exists but DB_PATH's parent
-    may not — sqlite3.connect() does not create directories, only the file
-    itself, so this has to happen before the first get_conn()."""
+    may not — sqlite3.connect() does not create directories, only the
+    file itself, so this has to happen before the first get_conn()."""
     db_dir = os.path.dirname(settings.DB_PATH)
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)

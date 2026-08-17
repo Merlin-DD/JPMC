@@ -72,3 +72,51 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+# Without this, unhandled request exceptions vanish in production.
+#
+# Django's built-in DEFAULT_LOGGING only sends the 'django.request' logger
+# to two handlers: 'console', which is filtered by require_debug_true (so
+# it does nothing at all once DEBUG=False), and 'mail_admins', which is a
+# silent no-op unless ADMINS/EMAIL_BACKEND are configured (they aren't
+# here). The result: every 500 is fully swallowed — nothing on stdout,
+# nothing anywhere — leaving only the access-log line WSGI/gunicorn prints
+# regardless. This LOGGING block replaces the 'console' handler with one
+# that always runs, points 'django.request' at ERROR to it explicitly (own
+# handler, not through 'django' -> 'mail_admins'), and gives every other
+# logger — including our own book.* modules — a root handler at INFO so
+# nothing has to opt in individually.
+#
+# No extra work is needed to get full tracebacks: Django's own request
+# logging already calls logger.error(..., exc_info=...) for a 500, and the
+# stdlib's logging.Formatter renders exc_info into the output automatically
+# whenever it's present, for any handler.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "%(asctime)s %(levelname)s %(name)s: %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            # Otherwise this also bubbles up through 'django' to the root
+            # logger's 'console' handler and prints every 500 twice.
+            "propagate": False,
+        },
+    },
+}

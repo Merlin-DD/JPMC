@@ -8,19 +8,22 @@ Two independent cadences, each on its own daemon thread:
   written commentary. Separate because commentary is expensive (an LLM
   call) and has no reason to run at market-data speed.
 
-Both are started once from BookConfig.ready(), behind a single guard, so
+Both are started together by `start()`, behind a single guard, so
 "started" is all-or-nothing: there is never a book with a refresh loop
-but no commentary loop.
+but no commentary loop. `start()` itself is called from book/startup.py's
+`ensure_started()`, post-fork (gunicorn's post_fork hook, or the first
+request under `manage.py runserver`) — never from AppConfig.ready()
+directly; see book/startup.py for why.
 
 The commentary cadence is anchored on a `last_commentary_run` timestamp
 in system_state rather than on process uptime, so a redeploy or restart
 resumes the existing schedule instead of firing a fresh LLM call on every
 boot.
 
-Started once from BookConfig.ready(). Blocked for every `manage.py`
-subcommand (migrate, seed, shell, collectstatic, ...) except `runserver`
-— gunicorn in production and `manage.py runserver` in dev are the only
-entry points that should actually run it.
+Blocked for every `manage.py` subcommand (migrate, seed, shell,
+collectstatic, ...) except `runserver` — gunicorn in production and
+`manage.py runserver` in dev are the only entry points that should
+actually run it.
 
 `runserver`'s autoreloader re-execs the whole command in a child process
 with RUN_MAIN=true; the parent is just a file-watcher that also calls
